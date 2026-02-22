@@ -27,6 +27,11 @@ anthropic_key*
 claude_key*
 ANTHROPIC_API_KEY*
 
+# ── Google / Gmail OAuth (Silver Tier) ────────────────────
+credentials.json
+token.json
+.env.github
+
 # ── Obsidian vault personal data ──────────────────────────
 # Keep vault structure but exclude personal task content
 AI_Employee/Done/
