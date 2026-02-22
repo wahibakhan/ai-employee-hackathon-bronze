@@ -80,3 +80,4 @@ python3 watcher.py
 ---
 
 *Panaversity Personal AI Employee Hackathon 0 — Bronze/Silver Tier*
+# ai-employee-hackathon-bronze
