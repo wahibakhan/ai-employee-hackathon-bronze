@@ -26,6 +26,7 @@ AGENT_SIGNATURE = "Panaversity AI Employee — Silver Tier"
 
 # ── BaseWatcher ───────────────────────────────────────────────────────────────
 
+
 class BaseWatcher(ABC):
     """
     Abstract base class for all AI Employee watchers.
