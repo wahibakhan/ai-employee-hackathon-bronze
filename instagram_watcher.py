@@ -77,6 +77,7 @@ except ImportError:
 KEYWORDS: list[str] = [
     "price", "quote", "design", "urgent", "invoice",
     "business", "help", "rate", "service",
+    "chahiye", "dm", "post",
 ]
 
 # High-urgency keywords → priority: high in task file
