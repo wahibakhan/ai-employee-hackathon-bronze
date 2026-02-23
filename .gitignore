@@ -1,75 +1,14 @@
-# ============================================================
-#  AI Employee Hackathon — .gitignore
-#  NEVER commit secrets, keys, or personal vault data
-# ============================================================
+# Browser session data — never commit
+instagram_session/
+whatsapp_session/
 
-# ── Secrets & API Keys ────────────────────────────────────
-.env
-.env.*
-*.env
-env.py
-secrets.py
-secrets.json
-secrets.yaml
-secrets.yml
-config.local.*
-*.key
-*.pem
-*.p12
-*.pfx
-api_keys.*
-credentials.*
-token.json
-auth.json
+# Local MCP config
+.mcp.json
 
-# ── Anthropic / Claude specific ───────────────────────────
-anthropic_key*
-claude_key*
-ANTHROPIC_API_KEY*
-
-# ── Google / Gmail OAuth (Silver Tier) ────────────────────
-credentials.json
-token.json
-.env.github
-
-# ── Obsidian vault personal data ──────────────────────────
-# Keep vault structure but exclude personal task content
-AI_Employee/Done/
-AI_Employee/Needs_Action/
-AI_Employee/.obsidian/workspace
-AI_Employee/.obsidian/workspace.json
-AI_Employee/.obsidian/cache
-AI_Employee/.obsidian/plugins/
-
-# ── Python ────────────────────────────────────────────────
+# Python cache
 __pycache__/
-*.py[cod]
+*.pyc
 *.pyo
-*.pyd
-.Python
-.venv/
-venv/
-env/
-*.egg-info/
-dist/
-build/
-.eggs/
 
-# ── OS & Editor ───────────────────────────────────────────
+# OS
 .DS_Store
-Thumbs.db
-desktop.ini
-*.swp
-*.swo
-*~
-.idea/
-.vscode/settings.json
-
-# ── Logs ──────────────────────────────────────────────────
-*.log
-logs/
-watcher.log
-
-# ── Node (if added later) ─────────────────────────────────
-node_modules/
-npm-debug.log*
