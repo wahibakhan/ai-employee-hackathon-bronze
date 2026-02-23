@@ -22,7 +22,7 @@ Use Skill: [Skill Name] with [parameter]: [value]
 | 1 | [[SK01_Task_Analyzer]] | `analyze task` | Read & classify any task file |
 | 2 | [[SK02_Plan_Creator]] | `create plan` | Build structured action plan |
 | 3 | [[SK03_Approval_Requester]] | `request approval` | Flag sensitive actions for human |
-| 4 | [[SK04_LinkedIn_Post_Generator]] | `write linkedin` | Draft professional LinkedIn posts |
+| 4 | [[SK04_Instagram_Post_Generator]] | `write instagram` | Draft Instagram captions + hashtags |
 | 5 | [[SK05_Email_Drafter]] | `draft email` | Compose professional emails |
 | 6 | [[SK06_File_Mover_Logger]] | `move file` | Move files + log all actions |
 | 7 | [[SK07_Dashboard_Updater]] | `update dashboard` | Sync Dashboard.md status |
@@ -35,7 +35,7 @@ Use Skill: [Skill Name] with [parameter]: [value]
 Use Skill: Plan Creator with objective: Send invoice to client Ahmed
 Use Skill: Email Drafter with context: Follow up on Q1 proposal
 Use Skill: Approval Requester with action: Delete vendor contract file
-Use Skill: LinkedIn Post Generator with topic: Launched AI Employee project
+Use Skill: Instagram Post Generator with topic: Launched AI Employee project
 ```
 
 ---
