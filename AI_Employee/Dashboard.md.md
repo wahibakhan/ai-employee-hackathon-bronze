@@ -74,3 +74,8 @@
 - Approval file: Pending_Approval/APPROVAL_FILE_DROP_test_invoice3.md
 - Action awaiting approval: process_invoice
 - Agent: AI Employee — Silver Tier
+
+## Cleanup Log
+- All WhatsApp-related files and session data deleted on 2026-02-23 22:00:00
+- Reason: Switching to Instagram watcher
+- Files removed: 23 WHATSAPP_*.md from Needs_Action/, whatsapp_session/ folder
