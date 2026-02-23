@@ -83,7 +83,7 @@ KEYWORDS: list[str] = [
 URGENT_KEYWORDS: set[str] = {"urgent", "invoice", "help"}
 
 POLL_INTERVAL     = 60        # seconds between Instagram DM checks
-LOGIN_TIMEOUT     = 180       # seconds to wait for manual login
+LOGIN_TIMEOUT     = 300       # seconds to wait for manual login
 INBOX_TIMEOUT     = 30_000    # ms — wait for DM inbox to load
 PAGE_SETTLE_MS    = 3_000     # ms — wait after navigation for SPA to render
 SESSION_MARKER    = "ig_session_ok"
@@ -102,78 +102,74 @@ logging.basicConfig(
 
 # ── JavaScript: extract unread/keyword DM threads from Instagram DOM ──────────
 #
-# Instagram is a React SPA with dynamic class names that change with each
-# deploy. We use three strategies in priority order and fall back gracefully.
-# We also check computed font-weight to detect unread threads (Instagram bolds
-# the sender name and preview for unread messages).
+# Key insight from live testing: Instagram puts many [role="listbox"] elements
+# on the page with aria-hidden="true" (search dropdowns etc). The real DM
+# thread list is made up of <a href="/direct/t/[id]/"> anchor elements — one
+# per conversation. This is stable across deploys and doesn't collide with
+# hidden elements.
+#
+# Unread detection: Instagram bolds the sender name and preview for unread
+# threads via computed font-weight >= 600, or places a blue dot SVG.
 #
 _JS_EXTRACT_DMS = """
 (keywords) => {
-    const results  = [];
-    const seen     = new Set();
+    const results = [];
+    const seen    = new Set();
 
-    // ── Helper: get computed font-weight of an element ───────────────────────
+    // ── Helper: check if element has bold computed font-weight ────────────────
     function isBold(el) {
         if (!el) return false;
         const fw = window.getComputedStyle(el).fontWeight;
         return fw === 'bold' || parseInt(fw, 10) >= 600;
     }
 
-    // ── Strategy 1: ARIA listbox (Instagram uses this for DM thread list) ────
-    let items = [];
-    const listbox = document.querySelector('[role="listbox"]');
-    if (listbox) {
-        items = [...listbox.querySelectorAll('[role="option"]')];
-        if (!items.length) {
-            // Some builds use direct div children of listbox
-            items = [...listbox.children];
-        }
-    }
+    // ── Primary: DM thread links — href="/direct/t/[thread_id]/" ─────────────
+    // Each conversation in the inbox is an anchor with this href pattern.
+    // This is the most reliable selector across Instagram builds.
+    let items = [...document.querySelectorAll('a[href*="/direct/t/"]')];
 
-    // ── Strategy 2: navigation list inside the inbox panel ───────────────────
+    // ── Fallback: visible list items inside the inbox panel ──────────────────
+    // Only used if no thread links found (e.g. different Instagram layout).
     if (!items.length) {
-        items = [...document.querySelectorAll('div[aria-label*="nbox"] a')];
-    }
-
-    // ── Strategy 3: all clickable rows containing text in the left panel ─────
-    if (!items.length) {
-        const panel = document.querySelector('div[style*="flex-direction: column"]');
-        if (panel) {
-            items = [...panel.querySelectorAll('div[tabindex="0"]')];
-        }
+        items = [
+            // Visible listbox only (exclude aria-hidden dropdowns/search boxes)
+            ...document.querySelectorAll(
+                '[role="listbox"]:not([aria-hidden="true"]) [role="option"]'
+            ),
+        ];
     }
 
     for (const item of items) {
-        // ── Collect all leaf-level text spans (exclude nested containers) ─────
+        // ── Collect leaf text spans (no nested child elements) ────────────────
         const leafSpans = [...item.querySelectorAll('span')].filter(
             s => s.childElementCount === 0 && s.textContent.trim().length > 0
         );
-
         if (leafSpans.length < 1) continue;
 
-        // ── Sender: first meaningful span ────────────────────────────────────
-        const sender = leafSpans[0]?.textContent.trim() || '';
-        if (!sender || seen.has(sender) || sender.length > 60) continue;
+        // ── Sender name: first meaningful span ───────────────────────────────
+        const sender = (leafSpans[0]?.textContent || '').trim();
+        if (!sender || seen.has(sender) || sender.length > 80) continue;
 
-        // ── Preview: second or third non-trivial span ─────────────────────────
+        // ── Message preview: first span that isn't the sender or a timestamp ──
         let preview = '';
         for (let i = 1; i < leafSpans.length; i++) {
             const t = leafSpans[i].textContent.trim();
-            // Skip timestamps (short, digits/letters like "2h", "Mon")
-            if (t.length > 8 && t !== sender) {
+            // Skip: empty, same as sender, short timestamps like "2h" / "Mon"
+            if (t && t !== sender && t.length > 5 && !/^\\d+[smhd]$/.test(t)) {
                 preview = t;
                 break;
             }
         }
 
-        // ── Unread detection: bold sender OR blue dot indicator ───────────────
+        // ── Unread: bold sender, bold preview, or Instagram blue dot ─────────
         const hasBoldSender  = isBold(leafSpans[0]);
-        const hasBoldPreview = preview && leafSpans.find(
+        const hasBoldPreview = !!leafSpans.find(
             s => s.textContent.trim() === preview && isBold(s)
         );
-        // Instagram sometimes uses a coloured circle SVG for unread
         const hasUnreadDot = !!item.querySelector(
-            'svg[aria-label*="nread"], div[style*="background-color: rgb(0, 149, 246)"]'
+            'svg[aria-label*="nread"], ' +
+            'div[style*="background-color: rgb(0, 149, 246)"], ' +
+            'span[style*="background-color: rgb(0, 149, 246)"]'
         );
         const hasUnread = hasBoldSender || hasBoldPreview || hasUnreadDot;
 
@@ -357,10 +353,12 @@ class InstagramWatcher(BaseWatcher):
             # May already be redirected (e.g. session partially restored)
             self.logger.info("Login form not detected — checking for inbox directly…")
 
-        # Wait until the DM inbox thread list appears
+        # Wait until the browser navigates to the DM inbox URL.
+        # URL check is the most reliable signal: Instagram redirects to
+        # /direct/inbox/ only after a successful login + 2FA completion.
         try:
-            self._page.wait_for_selector(
-                '[role="listbox"], div[aria-label*="nbox"]',
+            self._page.wait_for_url(
+                "**/direct/inbox/**",
                 timeout=LOGIN_TIMEOUT * 1_000,
             )
         except PWTimeoutError:
@@ -369,9 +367,12 @@ class InstagramWatcher(BaseWatcher):
                 "Please restart and complete the login within the time limit."
             )
 
+        # Let the SPA render the conversation list before we start polling
+        self._page.wait_for_timeout(PAGE_SETTLE_MS)
+
         # Dismiss any lingering pop-ups before proceeding
         self._dismiss_dialogs()
-        self.logger.info("Login successful — DM inbox loaded.")
+        self.logger.info("Login successful — DM inbox URL confirmed.")
         self._mark_session()
 
     def _verify_session(self) -> None:
@@ -381,13 +382,11 @@ class InstagramWatcher(BaseWatcher):
         """
         self.logger.info("Verifying saved session…")
 
-        # If Instagram redirected us to the login page, session has expired
+        # Check URL — /direct/inbox/ means we're logged in and in the DMs.
         try:
-            self._page.wait_for_selector(
-                '[role="listbox"], div[aria-label*="nbox"]',
-                timeout=INBOX_TIMEOUT,
-            )
-            self.logger.info("Session valid — DM inbox loaded.")
+            self._page.wait_for_url("**/direct/inbox/**", timeout=INBOX_TIMEOUT)
+            self._page.wait_for_timeout(PAGE_SETTLE_MS)
+            self.logger.info("Session valid — DM inbox URL confirmed.")
             self._dismiss_dialogs()
         except PWTimeoutError:
             login_visible = self._page.locator(
@@ -403,7 +402,7 @@ class InstagramWatcher(BaseWatcher):
                 )
             else:
                 self.logger.warning(
-                    "DM inbox not confirmed within timeout — Instagram may be slow. "
+                    "DM inbox URL not confirmed within timeout — Instagram may be slow. "
                     "Will attempt polling anyway."
                 )
 
@@ -420,11 +419,8 @@ class InstagramWatcher(BaseWatcher):
         self.logger.warning("Page unhealthy — reconnecting…")
         try:
             self._page.goto(INBOX_URL, timeout=30_000, wait_until="domcontentloaded")
+            self._page.wait_for_url("**/direct/inbox/**", timeout=INBOX_TIMEOUT)
             self._page.wait_for_timeout(PAGE_SETTLE_MS)
-            self._page.wait_for_selector(
-                '[role="listbox"], div[aria-label*="nbox"]',
-                timeout=INBOX_TIMEOUT,
-            )
             self._dismiss_dialogs()
             self.logger.info("Reconnected to Instagram DM inbox.")
         except Exception as exc:
