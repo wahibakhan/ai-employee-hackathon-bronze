@@ -1,8 +1,12 @@
 {
   "mcpServers": {
+    "instagram-silver-tier": {
+      "type": "sse",
+      "url": "http://localhost:8000/sse"
+    },
     "playwright": {
       "type": "stdio",
-      "command": "/usr/bin/npx",
+      "command": "npx",
       "args": [
         "@playwright/mcp@latest"
       ],
