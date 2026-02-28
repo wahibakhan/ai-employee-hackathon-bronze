@@ -252,16 +252,20 @@ async def get_context() -> BrowserContext:
             )
 
             try:
-                # Use a full-origin pattern so the login-redirect URL
-                # (accounts/login/?next=.../direct/inbox/) does NOT match.
-                await page.wait_for_url(
-                    "https://www.instagram.com/direct/inbox/**",
+                # Wait until the page leaves the login/suspended/signup URL.
+                # After login Instagram redirects to the home feed, NOT to
+                # direct/inbox/, so we cannot use wait_for_url on a specific
+                # destination — just wait for "not a login page".
+                await page.wait_for_function(
+                    "() => !window.location.href.includes('accounts/login') "
+                    "   && !window.location.href.includes('accounts/suspended') "
+                    "   && !window.location.href.includes('accounts/emailsignup')",
                     timeout=LOGIN_TIMEOUT_MS,
                 )
-                log.info("Login confirmed — DM inbox detected.")
+                log.info("Login confirmed — left login page.")
             except PWTimeoutError:
                 log.warning(
-                    "DM inbox URL not confirmed within timeout. "
+                    "Login not confirmed within timeout. "
                     "Will attempt actions anyway."
                 )
 
@@ -343,10 +347,14 @@ async def _ensure_logged_in(page: Page) -> bool:
             timeout=LOGIN_TIMEOUT_MS,
         )
         SESSION_MARKER.touch()
-        log.info("Re-login confirmed — session restored.")
+        log.info("Re-login confirmed — session restored (now at %s).", page.url)
         return True
     except PWTimeoutError:
-        log.error("Re-login timed out. Closing context.")
+        log.error("Re-login timed out after %ds. Current URL: %s", LOGIN_TIMEOUT_MS // 1000, page.url)
+        await _invalidate_context()
+        return False
+    except Exception as exc:
+        log.error("_ensure_logged_in unexpected error (%s: %s). URL: %s", type(exc).__name__, exc, page.url)
         await _invalidate_context()
         return False
 
@@ -531,6 +539,9 @@ async def _do_send_dm(username: str, message: str) -> str:
         log.info("DM sent to @%s successfully.", username)
         return f"DM sent to @{username}: \"{message[:60]}{'…' if len(message) > 60 else ''}\""
 
+    except Exception as exc:
+        log.error("_do_send_dm failed (%s: %s). URL at failure: %s", type(exc).__name__, exc, page.url)
+        return f"ERROR: {type(exc).__name__}: {exc}"
     finally:
         await page.close()
 
