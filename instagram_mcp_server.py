@@ -318,23 +318,41 @@ async def _ensure_logged_in(page: Page) -> bool:
     """
     Return True if the current page indicates an active Instagram session.
 
-    If we land on the login page, keep the browser open and wait up to 5
-    minutes for the user to log in interactively — the same Chrome window
-    stays visible so they can complete authentication without any restart.
+    Detects login page via URL *and* presence of the username input (handles
+    JS-initiated redirects that complete after domcontentloaded fires).
+
+    If we land on the login page, bring the Chrome window to the foreground
+    and wait up to 5 minutes for the user to log in interactively.
     Returns False only if the 5-minute wait times out.
     """
     url = page.url
-    if "accounts/login" not in url and "accounts/suspended" not in url:
+    on_login_page = "accounts/login" in url or "accounts/suspended" in url
+
+    # Also detect JS-redirect to login page (URL may not have updated yet)
+    if not on_login_page:
+        try:
+            on_login_page = await page.locator('input[name="username"]').is_visible(timeout=2_000)
+        except Exception:
+            pass
+
+    if not on_login_page:
         return True
 
     log.warning(
-        "Session expired — Instagram login page detected. "
-        "Waiting up to 5 minutes for user to log in in the open Chrome window…"
+        "Session expired — Instagram login page detected (URL: %s). "
+        "Bringing Chrome to foreground — please log in within 5 minutes …",
+        page.url,
     )
     # Remove the stale marker so get_context() knows a fresh login is needed
     # on the *next* cold start, but keep _ctx alive for this call.
     if SESSION_MARKER.exists():
         SESSION_MARKER.unlink()
+
+    # Bring the Chrome tab to the foreground so the user can see it
+    try:
+        await page.bring_to_front()
+    except Exception:
+        pass
 
     try:
         # Wait until the page navigates away from the login/suspended URL.
@@ -455,9 +473,15 @@ async def _do_send_dm(username: str, message: str) -> str:
             timeout=NAV_TIMEOUT_MS,
         )
         await _dismiss_popups(page)
+        # Allow 2 s for any JS-initiated redirects (e.g. to the login page) to settle
+        await page.wait_for_timeout(2_000)
 
         if not await _ensure_logged_in(page):
-            return "ERROR: Instagram session expired. Re-authenticate and retry."
+            return (
+                "ERROR: Instagram session expired.\n"
+                "Fix: call reset_instagram_session() first, then call send_dm() again.\n"
+                "A Chrome window will open — log in to Instagram in that window."
+            )
 
         # After re-login Instagram may have redirected to the home feed.
         # Re-navigate to direct/new/ so the search box is present.
@@ -582,9 +606,14 @@ async def _do_post_to_feed(caption: str, image_path: Optional[str]) -> str:
             timeout=NAV_TIMEOUT_MS,
         )
         await _dismiss_popups(page)
+        await page.wait_for_timeout(2_000)
 
         if not await _ensure_logged_in(page):
-            return "ERROR: Instagram session expired. Re-authenticate and retry."
+            return (
+                "ERROR: Instagram session expired.\n"
+                "Fix: call reset_instagram_session() first, then call post_to_feed() again.\n"
+                "A Chrome window will open — log in to Instagram in that window."
+            )
 
         # ── Click the + / New post button ──────────────────────────────────────
         # Instagram renders the nav icon as <img alt="New post"> inside a link;
@@ -893,6 +922,32 @@ Move this file to:
         f"  2. Approve: move to AI_Employee/Approved/{filename}\n"
         f"     (or change  status: pending  →  status: approved  in the file)\n"
         f"  3. Re-run the tool call."
+    )
+
+
+@mcp.tool()
+async def reset_instagram_session() -> str:
+    """
+    Reset the Instagram browser session to force a fresh login.
+
+    Use this when send_dm or post_to_feed keeps returning 'session expired'.
+    After calling this tool, the next send_dm or post_to_feed call will open
+    a Chrome browser window — log in to Instagram manually in that window.
+
+    Returns:
+        Confirmation that the session was reset and instructions for next steps.
+    """
+    log.info("Tool: reset_instagram_session() — clearing browser session …")
+    await _invalidate_context()
+    log.info("Session invalidated. Next tool call will trigger fresh login.")
+    return (
+        "Instagram session reset successfully.\n\n"
+        "Next steps:\n"
+        "  1. Call send_dm() or post_to_feed() again.\n"
+        "  2. A Chrome browser window will open automatically.\n"
+        "  3. Log in to Instagram in that window (username + password + 2FA if needed).\n"
+        "  4. The tool will proceed automatically after you log in.\n\n"
+        "Note: Do NOT close the Chrome window — it must stay open for the session."
     )
 
 
