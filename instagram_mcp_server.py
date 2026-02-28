@@ -313,18 +313,37 @@ async def _invalidate_context() -> None:
 async def _ensure_logged_in(page: Page) -> bool:
     """
     Return True if the current page indicates an active Instagram session.
-    If we're on the login page, invalidate the cached context so the next
-    tool call automatically triggers a fresh re-authentication flow.
+
+    If we land on the login page, keep the browser open and wait up to 5
+    minutes for the user to log in interactively — the same Chrome window
+    stays visible so they can complete authentication without any restart.
+    Returns False only if the 5-minute wait times out.
     """
     url = page.url
-    if "accounts/login" in url or "accounts/suspended" in url:
-        log.error(
-            "Session expired — Instagram redirected to login page. "
-            "Invalidating cached context; re-authenticate and retry."
+    if "accounts/login" not in url and "accounts/suspended" not in url:
+        return True
+
+    log.warning(
+        "Session expired — Instagram login page detected. "
+        "Waiting up to 5 minutes for user to log in in the open Chrome window…"
+    )
+    # Remove the stale marker so get_context() knows a fresh login is needed
+    # on the *next* cold start, but keep _ctx alive for this call.
+    if SESSION_MARKER.exists():
+        SESSION_MARKER.unlink()
+
+    try:
+        await page.wait_for_url(
+            "https://www.instagram.com/direct/**",
+            timeout=LOGIN_TIMEOUT_MS,
         )
+        SESSION_MARKER.touch()
+        log.info("Re-login confirmed — session restored.")
+        return True
+    except PWTimeoutError:
+        log.error("Re-login timed out. Closing context.")
         await _invalidate_context()
         return False
-    return True
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
