@@ -200,7 +200,10 @@ async def get_context() -> BrowserContext:
         )
 
         _pw = await async_playwright().start()
-        _ctx = await _pw.chromium.launch_persistent_context(
+        # Use installed Chrome when available — it is far less likely to be
+        # fingerprinted as a bot by Instagram than Playwright's bundled Chromium.
+        # Fall back to bundled Chromium if Chrome is not installed.
+        launch_kwargs: dict = dict(
             user_data_dir=str(SESSION_DIR),
             headless=headless,
             viewport={"width": 1280, "height": 900},
@@ -210,6 +213,14 @@ async def get_context() -> BrowserContext:
             ],
             ignore_https_errors=True,
         )
+        try:
+            _ctx = await _pw.chromium.launch_persistent_context(
+                channel="chrome", **launch_kwargs
+            )
+            log.info("Browser launched using installed Google Chrome.")
+        except Exception:
+            log.warning("Google Chrome not found — falling back to bundled Chromium.")
+            _ctx = await _pw.chromium.launch_persistent_context(**launch_kwargs)
 
         if not headless:
             # ── First-time login flow ──────────────────────────────────────────
