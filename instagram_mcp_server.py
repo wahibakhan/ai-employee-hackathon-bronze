@@ -333,8 +333,13 @@ async def _ensure_logged_in(page: Page) -> bool:
         SESSION_MARKER.unlink()
 
     try:
-        await page.wait_for_url(
-            "https://www.instagram.com/direct/**",
+        # Wait until the page navigates away from the login/suspended URL.
+        # After login Instagram typically redirects to the home feed, NOT back
+        # to direct/**, so we cannot wait for a specific destination URL.
+        await page.wait_for_function(
+            "() => !window.location.href.includes('accounts/login') "
+            "   && !window.location.href.includes('accounts/suspended') "
+            "   && !window.location.href.includes('accounts/emailsignup')",
             timeout=LOGIN_TIMEOUT_MS,
         )
         SESSION_MARKER.touch()
@@ -445,6 +450,17 @@ async def _do_send_dm(username: str, message: str) -> str:
 
         if not await _ensure_logged_in(page):
             return "ERROR: Instagram session expired. Re-authenticate and retry."
+
+        # After re-login Instagram may have redirected to the home feed.
+        # Re-navigate to direct/new/ so the search box is present.
+        if "direct/new" not in page.url:
+            log.info("Re-navigating to direct/new/ after re-login …")
+            await page.goto(
+                "https://www.instagram.com/direct/new/",
+                wait_until="domcontentloaded",
+                timeout=NAV_TIMEOUT_MS,
+            )
+            await _dismiss_popups(page)
 
         # ── Search for user ────────────────────────────────────────────────────
         search = page.locator(
