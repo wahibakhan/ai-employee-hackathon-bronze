@@ -246,8 +246,10 @@ async def get_context() -> BrowserContext:
             )
 
             try:
+                # Use a full-origin pattern so the login-redirect URL
+                # (accounts/login/?next=.../direct/inbox/) does NOT match.
                 await page.wait_for_url(
-                    "**/direct/inbox/**",
+                    "https://www.instagram.com/direct/inbox/**",
                     timeout=LOGIN_TIMEOUT_MS,
                 )
                 log.info("Login confirmed — DM inbox detected.")
