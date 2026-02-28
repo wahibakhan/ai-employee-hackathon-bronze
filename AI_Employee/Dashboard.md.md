@@ -92,3 +92,5 @@
 - [2026-02-28 11:26:24] Sent DM to @testuser — Agent: Instagram MCP Server
 - [2026-02-28 11:30:38] Approval request created: APPROVAL_INSTAGRAM_DM_riyapari2620.md (action=DM, subject=riyapari2620) — Agent: Instagram MCP Server
 - [2026-02-28 11:31:00] Sent DM to @riyapari2620 — Agent: Instagram MCP Server
+- [2026-02-28 11:35:42] Sent DM to @riyapari2620 — Agent: Instagram MCP Server
+- [2026-02-28 11:37:10] Sent DM to @riyapari2620 — Agent: Instagram MCP Server
