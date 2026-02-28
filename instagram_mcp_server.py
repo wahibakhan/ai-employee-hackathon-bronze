@@ -171,15 +171,17 @@ _ctx_lock = asyncio.Lock()
 
 async def get_context() -> BrowserContext:
     """
-    Return (or create) the persistent Chromium context backed by instagram_session/.
+    Return (or create) the persistent Chrome context backed by instagram_session/.
+
+    Always runs headed (headless=False) — Instagram reliably blocks headless
+    browsers.  The browser window is minimised so it stays out of the way.
 
     First run (no SESSION_MARKER):
-        headless=False — browser window opens so the user can log in manually.
-        After the DM inbox URL is confirmed, SESSION_MARKER is written and
-        all future calls use headless=True.
+        Navigates to the DM inbox and waits up to 5 minutes for the user to
+        log in.  Once confirmed, SESSION_MARKER is written.
 
     Subsequent runs:
-        headless=True — session restored silently from the persistent user-data-dir.
+        Cookies are restored from the persistent user-data-dir; no login wait.
     """
     global _pw, _ctx
 
@@ -193,23 +195,27 @@ async def get_context() -> BrowserContext:
             log.info("Session marker removed — will open headed browser for re-login.")
 
         SESSION_DIR.mkdir(parents=True, exist_ok=True)
-        headless = SESSION_MARKER.exists()
+        # Always run headed — Instagram reliably blocks headless Chromium/Chrome.
+        # The session marker now only controls whether to wait for manual login,
+        # not whether to run headless.
+        needs_login = not SESSION_MARKER.exists()
 
         log.info(
-            "Launching Chromium (headless=%s, session=%s) …", headless, SESSION_DIR
+            "Launching Chrome (headed, needs_login=%s, session=%s) …",
+            needs_login, SESSION_DIR,
         )
 
         _pw = await async_playwright().start()
-        # Use installed Chrome when available — it is far less likely to be
-        # fingerprinted as a bot by Instagram than Playwright's bundled Chromium.
+        # Use installed Chrome — less detectable than Playwright's bundled Chromium.
         # Fall back to bundled Chromium if Chrome is not installed.
         launch_kwargs: dict = dict(
             user_data_dir=str(SESSION_DIR),
-            headless=headless,
+            headless=False,  # always headed — Instagram blocks headless mode
             viewport={"width": 1280, "height": 900},
             args=[
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
+                "--start-minimized",  # open minimised so it doesn't interrupt the UI
             ],
             ignore_https_errors=True,
         )
@@ -217,13 +223,13 @@ async def get_context() -> BrowserContext:
             _ctx = await _pw.chromium.launch_persistent_context(
                 channel="chrome", **launch_kwargs
             )
-            log.info("Browser launched using installed Google Chrome.")
+            log.info("Browser launched using installed Google Chrome (headed).")
         except Exception:
             log.warning("Google Chrome not found — falling back to bundled Chromium.")
             _ctx = await _pw.chromium.launch_persistent_context(**launch_kwargs)
 
-        if not headless:
-            # ── First-time login flow ──────────────────────────────────────────
+        if needs_login:
+            # ── First-time / post-reset login flow ────────────────────────────
             log.info("=" * 60)
             log.info("  INSTAGRAM LOGIN REQUIRED")
             log.info("  A browser window will open.")
@@ -251,7 +257,7 @@ async def get_context() -> BrowserContext:
                     "Will attempt actions anyway."
                 )
 
-            # Write marker so future runs are headless
+            # Write marker so future starts skip the login wait
             SESSION_MARKER.touch()
             log.info("Session saved to %s", SESSION_DIR)
             await page.close()
