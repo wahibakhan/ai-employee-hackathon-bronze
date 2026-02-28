@@ -260,18 +260,44 @@ async def _dismiss_popups(page: Page) -> None:
             pass
 
 
+async def _invalidate_context() -> None:
+    """
+    Close the stale browser context and clear the module-level singletons so
+    the next tool call triggers a fresh login flow.  Also removes the session
+    marker so get_context() opens a headed browser for re-authentication.
+    """
+    global _pw, _ctx
+    async with _ctx_lock:
+        if _ctx is not None:
+            try:
+                await _ctx.close()
+            except Exception:
+                pass
+            _ctx = None
+        if _pw is not None:
+            try:
+                await _pw.stop()
+            except Exception:
+                pass
+            _pw = None
+    if SESSION_MARKER.exists():
+        SESSION_MARKER.unlink()
+        log.info("Session marker removed — next call will trigger re-login.")
+
+
 async def _ensure_logged_in(page: Page) -> bool:
     """
     Return True if the current page indicates an active Instagram session.
-    If we're on the login page, the session has expired.
+    If we're on the login page, invalidate the cached context so the next
+    tool call automatically triggers a fresh re-authentication flow.
     """
     url = page.url
     if "accounts/login" in url or "accounts/suspended" in url:
         log.error(
             "Session expired — Instagram redirected to login page. "
-            "Delete instagram_session/ig_session_ok and restart the server "
-            "to re-authenticate."
+            "Invalidating cached context; re-authenticate and retry."
         )
+        await _invalidate_context()
         return False
     return True
 
