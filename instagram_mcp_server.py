@@ -135,9 +135,9 @@ RESET_SESSION = "--reset-session" in sys.argv
 
 # Timeouts (milliseconds for Playwright, seconds elsewhere)
 LOGIN_TIMEOUT_MS   = 300_000   # 5 min: wait for manual Instagram login
-NAV_TIMEOUT_MS     = 15_000    # page load
-ACTION_TIMEOUT_MS  = 10_000    # wait for individual elements
-SETTLE_MS          = 1_500     # short settle after DOM changes
+NAV_TIMEOUT_MS     = 60_000    # page load (Instagram can be slow)
+ACTION_TIMEOUT_MS  = 20_000    # wait for individual elements
+SETTLE_MS          = 2_000     # short settle after DOM changes
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -150,6 +150,8 @@ log = logging.getLogger("InstagramMCP")
 # ── FastMCP app ────────────────────────────────────────────────────────────────
 mcp = FastMCP(
     "instagram-silver-tier",
+    host="0.0.0.0",
+    port=MCP_PORT,
     instructions=(
         "Instagram MCP Server for the Panaversity AI Employee Silver Tier. "
         "Provides send_dm and post_to_feed tools. "
@@ -386,9 +388,12 @@ async def _do_send_dm(username: str, message: str) -> str:
         await page.wait_for_timeout(SETTLE_MS)  # let autocomplete populate
 
         # ── Select first autocomplete result ───────────────────────────────────
+        # Instagram has used multiple selectors over time; try all known variants.
         result = page.locator(
             '[role="option"]:not([aria-disabled="true"]), '
-            '[data-testid="user-result-item"]'
+            '[data-testid="user-result-item"], '
+            f'[role="button"]:has([role="presentation"]):has-text("{username}"), '
+            f'[role="presentation"]:has-text("{username}")'
         ).first
         await result.wait_for(state="visible", timeout=ACTION_TIMEOUT_MS)
         await result.click()
@@ -485,10 +490,13 @@ async def _do_post_to_feed(caption: str, image_path: Optional[str]) -> str:
             return "ERROR: Instagram session expired. Re-authenticate and retry."
 
         # ── Click the + / New post button ──────────────────────────────────────
+        # Instagram renders the nav icon as <img alt="New post"> inside a link;
+        # aria-label selectors on the link element itself no longer match.
         create_btn = page.locator(
+            'img[alt="New post"], '
+            'a:has(img[alt="New post"]), '
             '[aria-label="New post"], '
-            '[aria-label="Create"], '
-            'svg[aria-label="New post"]'
+            '[aria-label="Create"]'
         ).first
         await create_btn.wait_for(state="visible", timeout=ACTION_TIMEOUT_MS)
         await create_btn.click()
@@ -496,24 +504,21 @@ async def _do_post_to_feed(caption: str, image_path: Optional[str]) -> str:
         await page.wait_for_timeout(SETTLE_MS)
 
         # ── Upload image ───────────────────────────────────────────────────────
-        # Instagram's file input is usually hidden — set_input_files bypasses that
-        file_input = page.locator('input[type="file"]').first
-        try:
-            await file_input.set_input_files(str(img), timeout=5_000)
-            log.info("Image uploaded via hidden file input: %s", img.name)
-        except Exception:
-            # Fallback: click a visible "Select from computer" button
-            log.info("Hidden input not ready — trying 'Select from computer' button.")
-            async with page.expect_file_chooser() as fc_info:
-                select_btn = page.locator(
-                    'button:has-text("Select"), '
-                    'button:has-text("computer"), '
-                    'button:has-text("Choose")'
-                ).first
-                await select_btn.click()
-            chooser = await fc_info.value
-            await chooser.set_files(str(img))
-            log.info("Image uploaded via file chooser: %s", img.name)
+        # Instagram's file input is hidden and cannot be targeted directly with
+        # set_input_files in headless mode. Use the file-chooser flow instead.
+        log.info("Waiting for 'Select from computer' button …")
+        async with page.expect_file_chooser(timeout=ACTION_TIMEOUT_MS) as fc_info:
+            select_btn = page.locator(
+                'button:has-text("Select from computer"), '
+                'button:has-text("Select"), '
+                'button:has-text("computer"), '
+                'button:has-text("Choose")'
+            ).first
+            await select_btn.wait_for(state="visible", timeout=ACTION_TIMEOUT_MS)
+            await select_btn.click()
+        chooser = await fc_info.value
+        await chooser.set_files(str(img))
+        log.info("Image uploaded via file chooser: %s", img.name)
 
         await page.wait_for_timeout(2_000)
 
@@ -529,15 +534,16 @@ async def _do_post_to_feed(caption: str, image_path: Optional[str]) -> str:
                 log.warning("Next button not found at %s step — continuing.", step_name)
 
         # ── Enter caption ──────────────────────────────────────────────────────
+        # Instagram uses "..." (three dots) not "…" (ellipsis char) in the placeholder.
         caption_box = page.locator(
+            '[aria-label="Write a caption..."], '
             '[aria-label="Write a caption…"], '
             '[aria-label*="caption"], '
             '[placeholder*="caption"], '
-            '[contenteditable="true"]'
+            'div[role="textbox"][contenteditable="true"]'
         ).first
         await caption_box.wait_for(state="visible", timeout=ACTION_TIMEOUT_MS)
         await caption_box.click()
-        # Type slowly to trigger any caption-length counters
         await caption_box.fill(caption)
         log.info("Caption entered (%d chars).", len(caption))
 
@@ -549,9 +555,15 @@ async def _do_post_to_feed(caption: str, image_path: Optional[str]) -> str:
         await share_btn.click()
         log.info("Clicked Share — post submitted.")
 
-        # Wait for success indicator (post dialog closes or "Post shared" banner)
-        await page.wait_for_timeout(4_000)
-        log.info("Feed post created successfully.")
+        # Wait for Instagram's "Post shared" confirmation dialog
+        try:
+            await page.locator(
+                'h1:has-text("Post shared"), '
+                'h3:has-text("Your post has been shared")'
+            ).first.wait_for(state="visible", timeout=30_000)
+            log.info("Feed post created successfully — confirmed by Instagram.")
+        except Exception:
+            log.warning("Share confirmation not detected; post may still have succeeded.")
         return f"Feed post created with caption: \"{caption[:80]}{'…' if len(caption) > 80 else ''}\""
 
     finally:
@@ -839,5 +851,10 @@ if __name__ == "__main__":
     for d in (PENDING_DIR, APPROVED_DIR, REJECTED_DIR):
         d.mkdir(parents=True, exist_ok=True)
 
-    # Run as SSE server — Claude Code connects via http://localhost:<port>/sse
-    mcp.run(transport="sse", host="0.0.0.0", port=MCP_PORT)
+    # Transport selection: stdio (default) lets Claude Code spawn this process directly.
+    # Override with MCP_TRANSPORT=streamable-http for standalone HTTP mode.
+    transport = os.environ.get("MCP_TRANSPORT", "stdio")
+    if transport == "stdio":
+        mcp.run(transport="stdio")
+    else:
+        mcp.run(transport="streamable-http")
