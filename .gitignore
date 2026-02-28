@@ -1,9 +1,20 @@
 # Browser session data — never commit
 instagram_session/
 whatsapp_session/
+.playwright-mcp/
 
-# Local MCP config
+# Local MCP config (contains server paths, no secrets but still local)
 .mcp.json
+
+# Secrets & credentials — never commit
+.env
+.env.*
+*.env
+
+# Editor / IDE
+.vscode/
+.claude/
+AI_Employee/.obsidian/
 
 # Python cache
 __pycache__/
@@ -12,3 +23,4 @@ __pycache__/
 
 # OS
 .DS_Store
+Thumbs.db
