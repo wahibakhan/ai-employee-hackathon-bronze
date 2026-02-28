@@ -1,8 +1,12 @@
 {
   "mcpServers": {
     "instagram-silver-tier": {
-      "type": "sse",
-      "url": "http://localhost:8000/sse"
+      "type": "stdio",
+      "command": "C:/Users/HP/AppData/Local/Programs/Python/Python313/python.exe",
+      "args": [
+        "C:/projects/ai_employee/bronze/instagram_mcp_server.py",
+        "C:/projects/ai_employee/bronze"
+      ]
     },
     "playwright": {
       "type": "stdio",

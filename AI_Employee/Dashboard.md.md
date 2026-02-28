@@ -79,3 +79,16 @@
 - All WhatsApp-related files and session data deleted on 2026-02-23 22:00:00
 - Reason: Switching to Instagram watcher
 - Files removed: 23 WHATSAPP_*.md from Needs_Action/, whatsapp_session/ folder
+
+- [2026-02-24 07:51:05] Sent DM to @testuser — Agent: Instagram MCP Server
+- [2026-02-24 22:50:46] Approval request created: APPROVAL_INSTAGRAM_DM_testuser.md (action=DM, subject=testuser) — Agent: Instagram MCP Server
+- [2026-02-24 23:00:28] [DRY-RUN] DM to @testuser — Agent: Instagram MCP Server
+- [2026-02-28 10:57:27] Approval request created: APPROVAL_INSTAGRAM_POST_test-post.md (action=POST, subject=test-post) — Agent: Instagram MCP Server
+- [2026-02-28 11:19:37] Sent DM to @testuser — Agent: Instagram MCP Server
+- [2026-02-28 11:20:46] Sent DM to @testuser — Agent: Instagram MCP Server
+- [2026-02-28 11:21:42] Sent DM to @testuser — Agent: Instagram MCP Server
+- [2026-02-28 11:22:22] Sent DM to @testuser — Agent: Instagram MCP Server
+- [2026-02-28 11:23:31] Sent DM to @testuser — Agent: Instagram MCP Server
+- [2026-02-28 11:26:24] Sent DM to @testuser — Agent: Instagram MCP Server
+- [2026-02-28 11:30:38] Approval request created: APPROVAL_INSTAGRAM_DM_riyapari2620.md (action=DM, subject=riyapari2620) — Agent: Instagram MCP Server
+- [2026-02-28 11:31:00] Sent DM to @riyapari2620 — Agent: Instagram MCP Server
