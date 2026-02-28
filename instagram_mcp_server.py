@@ -215,7 +215,6 @@ async def get_context() -> BrowserContext:
             args=[
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
-                "--start-minimized",  # open minimised so it doesn't interrupt the UI
             ],
             ignore_https_errors=True,
         )
