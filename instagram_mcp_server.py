@@ -227,6 +227,13 @@ async def get_context() -> BrowserContext:
             log.warning("Google Chrome not found — falling back to bundled Chromium.")
             _ctx = await _pw.chromium.launch_persistent_context(**launch_kwargs)
 
+        # Patch navigator.webdriver to undefined on every page so Instagram's
+        # bot-detection scripts cannot read the automation flag.
+        await _ctx.add_init_script(
+            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+        )
+        log.info("navigator.webdriver patch applied.")
+
         if needs_login:
             # ── First-time / post-reset login flow ────────────────────────────
             log.info("=" * 60)
