@@ -10,6 +10,10 @@ whatsapp_session/
 .env
 .env.*
 *.env
+credentials.json
+token.json
+client_secret*.json
+service_account*.json
 
 # Editor / IDE
 .vscode/
