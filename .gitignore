@@ -15,6 +15,12 @@ token.json
 client_secret*.json
 service_account*.json
 
+# Personal data folders — never commit
+AI_Employee/Approved/
+AI_Employee/Needs_Action/
+AI_Employee/Done/
+AI_Employee/Inbox/
+
 # Editor / IDE
 .vscode/
 .claude/
